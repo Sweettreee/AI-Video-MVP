@@ -1,0 +1,29 @@
+# pip install -r requirements.txt를 통해 설치
+
+
+# Web Framework & Server
+fastapi
+uvicorn[standard]
+python-multipart
+
+# AI APIs
+anthropic
+google-genai
+
+# Video Processing
+moviepy
+decorator
+imageio
+imageio-ffmpeg
+
+# Cloud Storage
+cloudinary
+
+# Data Validation & Parsing
+pydantic
+
+# Database (SQLite ORM - 선택사항이나 권장됨)
+SQLAlchemy
+
+# Environment Variables Management
+python-dotenv
