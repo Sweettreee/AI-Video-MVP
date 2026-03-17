@@ -20,7 +20,8 @@ imageio-ffmpeg
 cloudinary
 
 # Data Validation & Parsing
-pydantic
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
 
 # Database (SQLite ORM - 선택사항이나 권장됨)
 SQLAlchemy
