@@ -3,14 +3,15 @@ import requests
 import cloudinary
 import cloudinary.uploader
 
-from app.core.config import CLOUD_NAME, API_KEY, API_SECRET, HF_KEY
+# 👇 [수정됨] 길었던 개별 변수들 대신, 통째로 관리되는 settings 객체 하나만 불러옵니다.
+from app.core.config import settings
 from app.schemas.image import ImageRequest
 
-# Cloudinary 설정 초기화
+# 👇 [수정됨] settings.변수명 형태로 깔끔하게 꺼내 씁니다.
 cloudinary.config(
-    cloud_name=CLOUD_NAME,
-    api_key=API_KEY,
-    api_secret=API_SECRET,
+    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+    api_key=settings.CLOUDINARY_API_KEY,
+    api_secret=settings.CLOUDINARY_API_SECRET,
     secure=True
 )
 
@@ -23,11 +24,12 @@ def backend_compose_prompt(req: ImageRequest) -> str:
 
 def generate_image_from_hf(prompt: str) -> bytes:
     """허깅페이스 API를 호출하여 이미지를 생성하고 바이트로 반환"""
-    if not HF_KEY:
+    # 👇 [수정됨] 허깅페이스 키도 settings에서 가져옵니다.
+    if not settings.HUGGINGFACE_API_KEY:
         raise Exception("Hugging Face API 키가 설정되지 않았습니다. .env 파일을 확인하세요!")
 
     API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
-    headers = {"Authorization": f"Bearer {HF_KEY}"}
+    headers = {"Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}"}
     max_retries = 5 
     
     for attempt in range(max_retries):
