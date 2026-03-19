@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # --- 팀원 담당: Claude (Anthropic) API 설정 ---
-    ANTHROPIC_API_KEY: str = "" # .env에 없으면 일단 빈 문자열로 처리 (에러 방지)
+    ANTHROPIC_API_KEY: str = "" 
     MODEL: str = "claude-sonnet-4-20250514"
     SAFETY_MODEL: str = "claude-haiku-4-5-20251001"
     MAX_TOKENS: int = 4096
@@ -15,9 +15,11 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
     HUGGINGFACE_API_KEY: str = ""
+    
+    # --- [수정됨] 최후의 보루: Fal.ai (비디오 생성) 설정 ---
+    FAL_KEY: str = ""
 
     # .env 파일을 자동으로 찾아서 위 변수들에 쏙쏙 넣어줍니다!
     model_config = {"env_file": ".env", "extra": "ignore"}
 
-# 이 settings 객체 하나만 다른 곳에서 import해서 쓰면 됩니다.
 settings = Settings()
