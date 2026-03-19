@@ -9,15 +9,19 @@
 ```
 유저 텍스트 입력
   → Claude (plot_generator): plain text 스토리보드 초안 생성
-  → Prompt Evaluation (plot_evaluator): 자동 채점
+  → plot_evaluator.full_eval(): 자동 채점  ← plot-generation 루프에서는 항상 full_eval
   │
-  ├─ 5점 이상 → 유저에게 제시 → Human Eval 진입
-  └─ 5점 미만 → Advisor (plot_advisor): 유저에게 가이드라인 리포트 제공
-                → 유저가 직접 입력 수정 → 재생성 → 재평가 → 루프
+  ├─ 5점 이상 → Human Eval 진입
+  └─ 5점 미만 → plot_advisor.generate_advice(): 가이드라인 생성
+                → 유저 수정사항 입력 → generate_plot(previous_storyboard + modification)
+                → full_eval() → 루프
   │
-  → Human Eval: 유저 직접 판단
-  → 만족 → Confirm 클릭 → Backend (plot_converter): plain text → JSON 파싱 → Nano Banana 2
-  → 불만족 → 피드백 funnel → Advisor → 유저 수정 → 루프
+  → Human Eval: 유저 직접 판단 (Phase 4)
+  → 만족 → plot_converter.parse_storyboard() → JSON 저장 → 이미지 생성
+  → 불만족 → 피드백 funnel → plot_advisor → 유저 수정 → 루프
+  │
+  → 이미지 생성 후 특정 컷 수정 시:
+    scenes_to_plain_text() → generate_plot() → plot_evaluator.focused_eval()  ← 여기서만 focused_eval
 ```
 
 ### 핵심 원칙
@@ -34,22 +38,26 @@
 
 | # | Criteria | What It Checks | Why It Matters | Downstream Impact |
 |---|----------|----------------|----------------|-------------------|
-| C1 | **Parseable structure** | plain text가 일관된 구분자/패턴을 갖고 있어 backend 파싱이 가능한가 (예: `[Cut 1]`, `[Cut 2]` 등의 반복 패턴) | confirm 후 backend이 regex/split으로 JSON 변환할 때, 패턴이 불규칙하면 파싱 실패 → 이미지 생성 불가 | → JSON 변환 → Nano Banana 2 전체 |
-| C2 | **Required fields present** | 각 컷에 필수 요소가 모두 포함되어 있는가: characters, composition, background, lighting, mood, story_beat, action, pose | 빠진 필드 = backend template prompt에 빈 슬롯 → Nano Banana 2이 무작위 이미지 생성 | → Nano Banana 2 prompt 품질 |
+| C1 | **Parseable structure** | plain text가 일관된 구분자/패턴을 갖고 있어 backend 파싱이 가능한가 (예: `[Cut 1]`, `[Cut 2]` 등의 반복 패턴) | confirm 후 backend이 regex/split으로 JSON 변환할 때, 패턴이 불규칙하면 파싱 실패 → 이미지 생성 불가 | → JSON 변환 → Hugging Face 이미지 생성 파이프라인 전체 |
+| C2 | **Required fields present** | 각 컷에 필수 요소가 모두 포함되어 있는가: characters, composition, background, lighting, mood, story_beat, action, pose | 빠진 필드 = backend template prompt에 빈 슬롯 → Hugging Face 이미지 생성 파이프라인이 무작위 이미지 생성 | → Hugging Face 이미지 생성 파이프라인 prompt 품질 |
 | C3 | **Cut count range** | 컷 수가 5–10개 범위 안인가 | 5개 미만 = 최종 영상 15초 미달 (Shorts/TikTok 부적합). 10개 초과 = Veo 2 비용 폭발 + 30초 초과 | → Veo 2 비용 → FFmpeg merge |
-| C4 | **No empty descriptions** | 모든 필드 값이 실질적인 내용을 담고 있는가 (공백, "없음", "N/A" 등 제외) | 빈 composition이나 lighting → Nano Banana 2 프롬프트가 `"Shot in with lighting"` 같은 깨진 문장 생성 | → Nano Banana 2 prompt 조립 |
+| C4 | ~~**No empty descriptions**~~ | **C2에 통합됨.** C2가 필드 존재 여부와 placeholder("없음", "N/A", "-") 모두 검사. | — | — |
 | C5 | **Unsafe content filter** | 폭력, NSFW, 혐오 표현 등 Veo 2 safety policy 위반 키워드가 없는가 | Veo 2가 unsafe prompt를 거부 → 해당 컷 영상 생성 실패 → 부분 실패로 merge 품질 저하 | → Veo 2 rejection 방지 |
 
 ### Model Grader — AI 기반 품질 평가
 
 | # | Criteria | What It Checks | Why It Matters | Downstream Impact |
 |---|----------|----------------|----------------|-------------------|
-| M1 | **Image prompt quality** | composition, background, lighting 묘사가 Nano Banana 2이 구체적 이미지를 생성할 만큼 구체적인가 | "예쁜 배경" 같은 모호한 표현 → Nano Banana 2이 매번 다른 이미지 생성 → 일관성 파괴 | → Nano Banana 2 출력 품질 |
-| M2 | **Character consistency** | 동일 캐릭터가 전체 컷에서 동일한 외형(의상, 헤어, 체형 등)으로 묘사되는가 | Nano Banana 2은 컷별로 독립 생성 → Claude가 "Cut 1: 빨간 자켓" / "Cut 5: 파란 코트"로 쓰면 캐릭터가 달라짐 | → 컷 간 시각적 일관성 |
+| M1 | **Image prompt quality** | composition, background, lighting 묘사가 Hugging Face 이미지 생성 파이프라인이 구체적 이미지를 생성할 만큼 구체적인가 | "예쁜 배경" 같은 모호한 표현 → Hugging Face 이미지 생성 파이프라인이 매번 다른 이미지 생성 → 일관성 파괴 | → Hugging Face 이미지 생성 파이프라인 출력 품질 |
+| M2 | **Character consistency** | 동일 캐릭터가 전체 컷에서 동일한 외형(의상, 헤어, 체형 등)으로 묘사되는가 | Hugging Face 이미지 생성 파이프라인은 컷별로 독립 생성 → Claude가 "Cut 1: 빨간 자켓" / "Cut 5: 파란 코트"로 쓰면 캐릭터가 달라짐 | → 컷 간 시각적 일관성 |
 | M3 | **Story coherence** | 컷들이 논리적 서사 흐름(도입→전개→클라이맥스→마무리)을 형성하는가 | 무작위 장면 나열 → merge 후 영상이 슬라이드쇼처럼 보임 → 심사 "효과성"(20점) 직결 | → 최종 영상 완성도 |
 | M4 | **Motion describability** | 각 컷이 Veo 2가 애니메이션으로 만들 수 있는 명확한 동작을 암시하는가 (시작→끝 움직임) | "캐릭터가 서있다" → Veo 2가 정지 이미지만 생성 → 영상이 아니라 사진 슬라이드가 됨 | → Veo 2 클립 품질 |
 | M5 | **Genre rule adherence** | 장르별 우선순위를 따르는가: K-pop(조명+패션), anime(화풍), game(구도+배경) | 장르 특성 무시 → 팬 콘텐츠가 아닌 범용 AI 이미지로 보임 → 심사 "창의성"(30점) 직결 | → 팬 authentic 느낌 |
 | M6 | **Backend parseable intent** | plain text의 각 필드가 명확하게 구분되어 있어 backend이 정확히 어떤 값을 어떤 JSON key에 매핑해야 하는지 판단할 수 있는가 | 모호한 서술 → backend 파싱 시 `action`과 `pose`가 뒤섞이거나, `background`와 `era`가 혼동됨 | → JSON 변환 정확도 |
+
+> **Focused Eval 참고:** M5(Genre rule adherence)와 M6(Backend parseable intent)는 Focused Eval에서 제외된다.
+> - M5 제외: 부분 수정으로 전체 장르 톤이 바뀌지 않음
+> - M6 제외: 전체 파싱 구조는 이미 Full Eval에서 검증됨
 
 ### Human Grader — 유저 주관 평가 (Human Eval 단계)
 
@@ -81,6 +89,38 @@ Step 3: Human Evaluation (H1–H3)
 
 ---
 
+## Focused Eval — 이미지 수정 후 부분 평가
+
+이미지 생성 완료 후 유저가 특정 컷을 수정하면, Full Eval 대신 Focused Eval을 적용한다.
+
+### 평가 대상 컷 선정
+- 유저가 수정 요청한 컷 번호(changed_cuts)
+- 인접 컷: changed_cuts 각각의 ±1 (서사 연결성 확인)
+- 예: changed_cuts=[3] → 평가 대상: Cut 2, 3, 4
+
+### 적용 기준
+
+| 구분 | Full Eval | Focused Eval | 제외 사유 |
+|------|-----------|--------------|-----------|
+| C1 Parseable structure | ✓ | ✗ | 전체 구조는 이미 검증됨 |
+| C2 Required fields | ✓ | ✓ | 수정된 컷에서 필드 누락 가능 |
+| C3 Cut count range | ✓ | ✗ | 컷 수는 변경되지 않음 |
+| C4 No empty descriptions | ✓ | ✗ | C2에 통합됨 — C2가 빈 필드 포함하여 검사 |
+| C5 Unsafe content | ✓ | ✓ | 수정 내용에 unsafe 표현 가능 |
+| M1 Image prompt quality | ✓ | ✓ | 수정된 컷의 이미지 품질 확인 |
+| M2 Character consistency | ✓ | ✓ | 수정이 캐릭터 일관성을 깨뜨릴 수 있음 |
+| M3 Story coherence | ✓ | ✓ | 인접 컷과의 서사 연결 확인 |
+| M4 Motion describability | ✓ | ✓ | 수정된 동작 묘사 품질 확인 |
+| M5 Genre adherence | ✓ | ✗ | 부분 수정으로 장르 톤이 바뀌지 않음 |
+| M6 Parseable intent | ✓ | ✗ | 전체 파싱 구조는 이미 검증됨 |
+
+### 합격선 및 실패 처리
+- 합격선: 5.0 (Full Eval과 동일)
+- Focused Eval 실패 → full_eval로 폴백 (전체 재평가)
+- Focused Eval 자체 에러 → full_eval로 폴백
+
+---
+
 ## Score → Action 매핑
 
 합산 점수 = (Code 평균 + Model 평균) / 2 기준.
@@ -88,10 +128,12 @@ Code 평균 5점 미만이면 Model Eval 없이 Code Eval 루프부터 순환.
 
 | 합산 점수 | Action |
 |---|---|
-| Code 평균 < 5.0 | Model Eval 실행 안 함 → Code 실패 항목 가이드 → 유저 수정 → Code Eval 재실행 (독립 루프) |
-| 합산 1.0–4.9 | Code + Model 전체 실패 항목 가이드 → 유저 수정 → Code Eval부터 재시작 |
-| 합산 5.0–7.9 | 약점 요약 안내 + 유저 선택 (수정 → 재입력 루프 / 이대로 진행 → Human Eval) |
-| 합산 8.0–10.0 | 유저에게 바로 제시 (Human Eval 진입) |
+| Code 평균 < 5.0 | Model Eval 실행 안 함 → failed_items 가이드 → 유저 수정 입력 → full_eval 재실행 |
+| 합산 1.0–4.9 | failed_items 기반 가이드라인 출력 → 유저 수정 입력 → 재생성 → full_eval 재실행 |
+| 합산 5.0–10.0 | 통과 → Human Eval 진입 (Phase 4) |
+
+> **현행 CLI (Phase 3) 기준:** 5.0 이상이면 점수 구간 관계없이 바로 통과 처리.
+> 5.0~7.9 구간의 "약점 요약 + 유저 선택" 분기는 Phase 4 Human Eval UI에서 구현 예정.
 
 ---
 

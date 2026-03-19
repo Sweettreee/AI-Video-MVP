@@ -22,14 +22,14 @@
 - FastAPI 라우터 / HTTP 엔드포인트
 - 프론트엔드 UI (점수 원형, 바 차트, 색상 등)
 - DB 저장 (SQLite/PostgreSQL)
-- Nano Banana 2 실제 API 연동
+- Hugging Face 이미지 생성 파이프라인 실제 연동 (Phase 5)
 - 인증/세션 관리
 
 ---
 
 ## 2. 구현 Phase
 
-### Phase 1 — 뼈대 세팅
+### Phase 1 — 뼈대 세팅 ✅ 완료
 **목표:** Claude를 호출해서 plain text 스토리보드가 나오는 것 확인
 
 ```
@@ -45,7 +45,7 @@
 
 ---
 
-### Phase 2 — 평가 (Evaluator)
+### Phase 2 — 평가 (Evaluator) ✅ 완료
 **목표:** 생성된 스토리보드를 자동 채점 (Code Eval 독립 → Code 통과 시 Model Eval)
 
 ```
@@ -58,17 +58,21 @@
 - Code 평균 5점 미만 → Model Grader 실행 안 됨 확인
 - Code 평균 5점 이상 → Model Grader 실행 → 합산 점수 = (Code 평균 + Model 평균) / 2 출력
 
+> **⚠️ 구현 제약:** Anthropic API에서 `tool_choice` 강제와 `extended thinking` 동시 사용 불가 (400 BadRequestError).
+> `run_model_grader()`의 `use_thinking=True`를 제거함. Structured Outputs만으로 일관된 채점 형식 확보.
+
 ---
 
-### Phase 3 — 가이드 + 루프 (Advisor)
+### Phase 3 — 가이드 + 루프 (Advisor) ✅ 완료
 **목표:** 점수 미달 시 유저에게 가이드 제공 → 재입력 → 재평가 루프
 
 ```
 구현 파일:
-  backend/app/prompts/advisor.py    — Advisor 가이드 생성 프롬프트
-  backend/app/prompts/templates.py  — 장르별 예시 입력 템플릿 (3회 미달 시 유저에게 제시)
-  backend/app/services/plot_advisor.py — 가이드라인 리포트 생성
-  cli.py 업데이트                   — 점수 구간별 분기 + 루프 로직 + 무한 루프 방지 추가
+  backend/app/prompts/advisor.py    — Advisor 가이드 생성 프롬프트 (C1~M6 rubric 포함)
+  backend/app/prompts/templates.py  — 장르별 예시 입력 템플릿 (kpop/anime/game, 3회 미달 시 제시)
+  backend/app/services/plot_advisor.py — generate_advice() (failed_items 기반, API 실패 시 static fallback)
+  cli.py 업데이트                   — generate → full_eval → 점수 출력 → 가이드라인 → 유저 수정 루프
+                                      무한 루프 방지: 3회(템플릿 제안) / 5회(계속 여부 확인) / 7회(중단)
 ```
 
 **완료 기준:**
@@ -153,10 +157,10 @@ def call_claude_structured(
     system_prompt: str,
     user_message: str,
     output_schema: type,         # Pydantic BaseModel 클래스
-    use_thinking: bool = False,  # True면 확장 사고 활성화
+    use_thinking: bool = False,  # ⚠️ forced tool_choice와 동시 사용 불가 — 현재 미사용
     cache_system: bool = False
 ):
-    """
+    """(Phase 2에서 구현 예정)
     반환: output_schema 타입의 Pydantic 객체 (파싱 보장)
     내부: client.messages.parse() + Structured Outputs 사용
     
@@ -166,7 +170,7 @@ def call_claude_structured(
     주의: stop_reason이 "refusal"이면 안전 거부 → None 반환 + 로그 기록
           stop_reason이 "max_tokens"이면 스키마 미준수 가능 → None 반환 + 재시도 안내
     
-    확장 사고: use_thinking=True면 thinking={"type": "enabled", "budget_tokens": settings.THINKING_BUDGET}
+    확장 사고: use_thinking 파라미터는 forced tool_choice와 API 호환 불가로 현재 미사용
       - Model Grader에서 활용 → 채점 전 내부 추론으로 평가 품질 향상
     """
 
@@ -245,7 +249,7 @@ def evaluate_plot(plain_text: str, previous_total: float | None = None) -> EvalR
         → 의심 시 유저에게 "이 표현이 거부될 수 있습니다: [키워드]. 변경하시겠습니까?" 확인
 
     Phase B: Model Grader (M1–M6) — code_average >= 5.0일 때만 실행
-      → call_claude_structured(eval.py 프롬프트, output_schema=ModelGraderResult, use_thinking=True)
+      → call_claude_structured(eval.py 프롬프트, output_schema=ModelGraderResult, cache_system=True)
       → Structured Outputs: JSON 파싱 실패 원천 불가능 (prefill/regex 불필요)
       → 확장 사고: 채점 전 내부 추론으로 평가 품질 향상 (budget: settings.THINKING_BUDGET)
       → 프롬프트 캐싱: cache_system=True (채점 기준이 매번 동일하므로)
@@ -260,6 +264,22 @@ def evaluate_plot(plain_text: str, previous_total: float | None = None) -> EvalR
 
     반환: EvalResult
     """
+
+def full_eval(plain_text: str, previous_total: float | None = None) -> EvalResult:
+    """최초 생성 시 전체 평가. evaluate_plot()과 동일.
+    적용 기준: C1~C5 + M1~M6 전체"""
+
+def focused_eval(
+    changed_cuts: list[int],
+    plain_text: str,
+    previous_total: float | None = None
+) -> EvalResult:
+    """이미지 생성 후 수정 시 부분 평가.
+    대상: 변경된 컷 + 인접 컷(±1)
+    적용 기준: C2/C5 + M1~M4
+    제외: C1/C3 (전체 구조 이미 검증), M5/M6 (전체 서사·장르 큰 변화 없음)
+    합격선: full_eval과 동일 (5.0)
+    실패 시: full_eval로 폴백"""
 
 def run_code_grader(plain_text: str) -> dict[str, float]:
     """C1–C5 각 항목 점수 반환 (10 또는 0, 일부는 부분 점수)
@@ -311,11 +331,15 @@ def generate_advice(
 
 ### `services/plot_converter.py`
 ```python
-@dataclass
-class Scene:
+# Scene은 schemas/scene.py의 Pydantic BaseModel로 정의됨
+# plot_converter.py는 직접 Scene을 정의하지 않고 schemas.scene.Scene을 import
+# from backend.app.schemas.scene import Scene
+
+# schemas/scene.py:
+class Scene(BaseModel):
     cut_number: int
     main_character: str
-    sub_character: str | None
+    sub_character: str | None = None
     action: str
     pose: str
     background: str
@@ -324,11 +348,19 @@ class Scene:
     lighting: str
     mood: str
     story_beat: str
-    duration_seconds: float  # 3.0–8.0
+    duration_seconds: float  # 3.0–8.0, coerce_duration validator 포함
 
-def convert_to_json(plain_text: str) -> list[Scene]:
+def scenes_to_plain_text(scenes: list[Scene]) -> str:
+    """
+    Scene JSON → [Cut N] plain text 복원.
+    이미지 수정 시 generate_plot()의 previous_storyboard로 전달.
+    라벨:값 1:1 대응이므로 정보 손실 없음. API 호출 불필요.
+    """
+
+def parse_storyboard(plain_text: str) -> list[Scene]:
     """
     plain text → Scene 리스트 파싱
+    full_eval 통과 후 또는 focused_eval 통과 후 모두 동일하게 호출.
     반환: list[Scene]
 
     에러 처리:
@@ -425,6 +457,14 @@ def main():
     # 13. 하나라도 미체크 → 피드백 funnel (Step 1~4)
     #     → plot_advisor 호출 (feedback=피드백_dict) → 가이드라인 출력
     #     → 유저 재입력 → 3번으로 (Phase A부터 재시작)
+    #
+    #
+    # === Post-Image 수정 시 (이미지 생성 후 수정 요청) ===
+    # 14. 이미지 생성 후 유저가 특정 컷 수정 요청
+    #     → generate_plot(previous_storyboard + modification) → 수정된 스토리보드
+    #     → focused_eval(changed_cuts, plain_text) — C2/C4/C5 + M1~M4, 변경컷+인접컷만
+    #     → focused_eval 실패 시 full_eval로 폴백
+    #     → 통과 시 변경된 컷만 이미지 재생성 (diff 기반)
     #
     # previous_total 업데이트 후 루프
 ```
@@ -574,6 +614,12 @@ $ python cli.py
 ---
 
 ## 6. 데이터 스키마
+
+### 평가 결과 저장 방식
+
+평가 결과(EvalResult)는 **파이프라인 내 변수로만 존재**한다. DB에 저장하지 않는다.
+점수는 통과/미달 판단에만 사용되며, 판단이 끝나면 폐기된다.
+DB 저장은 MVP 이후 평가 기준 튜닝/분석이 필요할 때 검토한다.
 
 ### 터미널 단계 간 전달 데이터
 
@@ -735,6 +781,9 @@ EvalResult {
 유저: "Cut 3 의상을 빨간 자켓으로"
     │
     ▼
+scenes_to_plain_text(scenes)            ← JSON → plain text 복원 (API 0회)
+    │
+    ▼
 generate_plot(answers, previous_storyboard, modification)
     │  → 전체 스토리보드 텍스트 재생성 (API 1회)
     ▼
@@ -755,13 +804,94 @@ diff(이전 scenes, 새 scenes) → 컷 단위 비교
 | | 전체 재생성 | diff 기반 부분 재생성 |
 |---|---|---|
 | 스토리보드 | API 1회 | API 1회 (동일) |
-| 평가 | API 1~2회 | 코드 검증만 (0회) |
+| 평가 | Full Eval (API 1~2회) | Focused Eval: C2/C4/C5 + M1~M4, 변경컷+인접컷 (API 0~1회) |
 | 이미지 | 5~10회 | 변경 컷만 1~2회 |
 | **합계** | **7~13회** | **2~3회** |
+
+### Focused Eval — 이미지 수정 시 부분 평가
+
+이미지 생성 후 수정 시에는 Full Eval 대신 Focused Eval을 적용한다.
+
+| 항목 | Full Eval (최초 생성) | Focused Eval (이미지 수정 후) |
+|------|----------------------|------------------------------|
+| 평가 대상 | 전체 컷 | 변경된 컷 + 인접 컷(±1) |
+| Code 기준 | C1~C5 | C2, C4, C5 |
+| Model 기준 | M1~M6 | M1~M4 |
+| 제외 사유 | — | C1/C3: 전체 구조 변경 없음. M5/M6: 전체 서사·장르 큰 변화 없음 |
+| 합격선 | 5.0 | 5.0 (동일) |
+| 실패 시 | advisor → 재입력 루프 | full_eval로 폴백 |
 
 ### 필요한 함수 (미구현)
 - `diff_scenes(old: list[Scene], new: list[Scene]) -> list[int]` — 변경된 컷 번호 반환
 - `regenerate_image(scene: Scene) -> str` — 특정 컷 이미지만 재생성
+
+### Phase 5 — 이미지/영상 생성 (FLUX.1-schnell + 캐릭터 시트)
+
+**이미지 일관성 전략:** 캐릭터 시트 자동 생성 + Global Context 강제 삽입
+
+현재 이미지 모델은 Hugging Face Inference API의 FLUX.1-schnell (텍스트→이미지만 지원, IP-Adapter 미지원).
+IP-Adapter 없이 텍스트 프롬프트만으로 일관성을 확보하기 위해:
+1. Claude로 캐릭터 시트를 한 번 자동 생성 (상세 묘사 보장)
+2. 모든 컷 프롬프트에 동일한 캐릭터 시트를 기계적으로 삽입
+
+```
+Step 0: 캐릭터 시트 생성 (Claude 1회 호출)
+  answers['character'] + scenes[0].main_character
+  → Claude: 헤어/의상/체형/피부/액세서리/특징 구조화
+  → character_sheet (상세 텍스트)
+
+Step 1: GlobalContext 생성
+  GlobalContext(
+    main_character = character_sheet,
+    sub_character = (서브캐릭터 있으면 동일 과정),
+    art_style = 장르/분위기에서 추론,
+    era = scenes[0].era,
+    color_palette = 장르/분위기에서 추론,
+  )
+
+Step 2: 컷별 이미지 생성 (N회)
+  compose_cut_prompt(global_ctx, scene) → FLUX.1-schnell → cut_N.png
+  (global_ctx의 캐릭터/스타일이 모든 컷에 동일하게 삽입)
+
+Step 3: 컷별 영상 생성
+  cut_N.png (첫 프레임 고정) + 동작 프롬프트 → Veo 2 → cut_N.mp4
+
+Step 4: FFmpeg 합치기
+  cut_1.mp4 + cut_2.mp4 + ... → final.mp4
+```
+
+**schemas/scene.py 추가:**
+```python
+class GlobalContext(BaseModel):
+    main_character: str       # 캐릭터 시트 (Claude가 생성한 상세 묘사)
+    sub_character: str | None
+    art_style: str            # anime cel-shading / photorealistic 등
+    era: str                  # modern / historical 등
+    color_palette: str        # warm golden / cool blue 등
+```
+
+**services/character_sheet.py 인터페이스:**
+```python
+def generate_character_sheet(answers: dict, scenes: list[Scene]) -> str
+  # Claude에게 캐릭터 시트 생성 요청 (1회)
+  # 필수 항목: 성별/나이, 헤어, 의상, 액세서리, 체형, 피부, 특징
+
+def extract_global_context(answers: dict, scenes: list[Scene]) -> GlobalContext
+  # 캐릭터 시트 + 장르/분위기에서 art_style, color_palette 추론
+```
+
+**utils/prompt.py 인터페이스:**
+```python
+def compose_cut_prompt(global_ctx: GlobalContext, scene: Scene) -> str
+  # global_ctx.main_character(캐릭터 시트) + global_ctx.art_style + scene 컷별 필드
+  # 캐릭터 묘사는 모든 컷에서 문자열 수준으로 100% 동일
+```
+
+**services/image.py (팀원 기존 코드 활용):**
+```python
+generate_image_from_hf(prompt) → bytes  # FLUX.1-schnell 호출 (기존)
+upload_to_cloudinary(image_bytes) → str  # Cloudinary 업로드 (기존)
+```
 
 
 ---
@@ -779,7 +909,7 @@ diff(이전 scenes, 새 scenes) → 컷 단위 비교
 | 터미널 "번호 입력" 상세 보기 | 프론트 바 탭 → 가이드 펼침 |
 | 터미널 체크리스트 (y/n) | 프론트 H1/H2/H3 체크박스 |
 | 터미널 피드백 번호 선택 | 프론트 피드백 funnel 버튼/칩 UI |
-| `output/*.json` 파일 저장 | DB 저장 + Nano Banana 2 API 호출 |
+| `output/*.json` 파일 저장 | DB 저장 + 이미지 생성 파이프라인 호출 (Phase 5) |
 | 빈 입력 → "입력해주세요" 재입력 | 422 Validation Error (Pydantic 자동) |
 | API 실패 → "네트워크 확인" 출력 | 503 Service Unavailable + retry-after header |
 | 파일 저장 실패 → 터미널 JSON 출력 | 200 + JSON body 직접 반환 (저장 실패 flag 포함) |

@@ -10,7 +10,7 @@ AI 2차 창작 영상 제작 서비스 — a backend service for generating AI f
 
 - **Backend:** Python 3.9+ / FastAPI
 - **AI:** Anthropic Claude API (Sonnet for generation/eval, Haiku for safety pre-checks)
-- **Image/Video (planned):** Google Gemini Nano Banana 2 (image gen), Veo 2 (image→video)
+- **Image/Video (planned):** Hugging Face FLUX.1-schnell (image gen, character consistency via character sheet + Global Context injection), Veo 2 (image→video)
 - **Validation:** Pydantic v2 + pydantic-settings
 - **Video Processing (planned):** MoviePy, Cloudinary SDK
 - **Deployment:** Railway (backend), Vercel (frontend)
@@ -35,7 +35,7 @@ No test framework or linter is configured yet. `.env` file with `ANTHROPIC_API_K
 
 ### Pipeline Flow
 
-User text input → **plot_generator** (Claude generates [Cut N] storyboard) → **plot_evaluator** (Code Grader C1-C5 + Model Grader M1-M6) → score < 5.0 triggers **plot_advisor** (improvement guidance) → loop back to generator. Score ≥ 8.0 → **human evaluation** (H1-H3) → **plot_converter** (plain text → JSON) → image/video generation pipeline.
+User text input → **plot_generator** (Claude generates [Cut N] storyboard) → **plot_evaluator** (Code Grader C1-C5 + Model Grader M1-M6) → score < 5.0 triggers **plot_advisor** (improvement guidance) → loop back to generator. Score ≥ 5.0 → **human evaluation** (H1-H3) — 5.0~7.9: option to modify first, ≥ 8.0: direct entry → **plot_converter** (plain text → JSON) → image/video generation pipeline.
 
 ### Key Design Principle
 
