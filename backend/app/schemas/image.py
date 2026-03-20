@@ -2,6 +2,7 @@ from pydantic import BaseModel
 
 
 class ImageRequest(BaseModel):
+    scene_id: int
     art_style: str
     main_character: str
     action: str
@@ -11,3 +12,8 @@ class ImageRequest(BaseModel):
     composition: str
     lighting: str
     mood: str
+
+
+class ImageModifyRequest(BaseModel):
+    scene_id: int
+    modified_prompt: str

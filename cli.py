@@ -3,6 +3,7 @@ import sys
 
 from backend.app.prompts.templates import get_template
 from backend.app.schemas.feedback import Feedback
+from backend.app.schemas.project import PlotRequest
 from backend.app.services.plot_advisor import generate_advice
 from backend.app.services.plot_converter import ParseError, parse_storyboard, save_to_file
 from backend.app.services.plot_evaluator import EvalResult, full_eval
@@ -22,8 +23,8 @@ MAX_FAILURES = 7
 TEMPLATE_SUGGEST_AT = 3
 CONTINUE_CONFIRM_AT = 5
 
-SCORE_DIRECT_HUMAN_EVAL = 8.0   # 이 이상이면 바로 Human Eval 진입
-SCORE_PASS_THRESHOLD = 5.0      # 이 이상이면 통과 (수정 여부 선택 가능)
+SCORE_DIRECT_HUMAN_EVAL = 8.0
+SCORE_PASS_THRESHOLD = 5.0
 
 
 # ── 입력 수집 ──────────────────────────────────────────────
@@ -55,7 +56,7 @@ def show_summary(answers: dict) -> None:
     print("─" * 50)
 
 
-def confirm_summary(answers: dict) -> dict:
+def confirm_summary(answers: dict) -> PlotRequest:
     while True:
         show_summary(answers)
         print("\n이대로 진행할까요? (y: 생성 / 번호: 항목 수정)")
@@ -68,7 +69,7 @@ def confirm_summary(answers: dict) -> dict:
 
         choice = input("> ").strip().lower()
         if choice == "y":
-            return answers
+            return PlotRequest(**answers)
 
         if choice.isdigit() and 1 <= int(choice) <= len(GUIDE_QUESTIONS):
             idx = int(choice) - 1
@@ -192,10 +193,8 @@ def run_human_eval(storyboard: str, cut_count: int) -> list[Feedback] | None:
     if input("> ").strip().lower() == "y":
         return None
 
-    # 피드백 funnel
-    feedback_items = []
+    feedback_items: list[Feedback] = []
 
-    # Step 1: 대분류
     print("\n[Step 1] 어디가 아쉬우세요? (복수 선택 가능, 쉼표로 구분)")
     for k, (_, label) in FEEDBACK_TYPES.items():
         print(f"  {k}. {label}")
@@ -204,14 +203,12 @@ def run_human_eval(storyboard: str, cut_count: int) -> list[Feedback] | None:
     for choice in choices:
         fb_type, _ = FEEDBACK_TYPES[choice]
 
-        # Step 2: 세부
         print(f"\n[Step 2] 구체적으로 어떤 부분인가요?")
         for k, label in enumerate(DETAIL_LABELS[fb_type], 1):
             print(f"  {k}. {label}")
         detail_choice = input("> ").strip()
         detail = FEEDBACK_DETAILS[fb_type].get(detail_choice, "기타")
 
-        # Step 3: 컷 선택
         print(f"\n[Step 3] 어떤 컷이 아쉬웠나요? (번호 입력, 쉼표로 구분 / 없으면 Enter)")
         print(f"  선택 가능: 1~{cut_count}")
         raw_cuts = input("> ").strip()
@@ -222,7 +219,6 @@ def run_human_eval(storyboard: str, cut_count: int) -> list[Feedback] | None:
                 if c.isdigit() and 1 <= int(c) <= cut_count:
                     target_cuts.append(int(c))
 
-        # Step 4: 자유 입력
         print("\n[Step 4] 추가로 원하는 게 있다면 적어주세요. (없으면 Enter)")
         free_text = input("> ").strip() or None
 
@@ -243,8 +239,9 @@ def main():
     print("  AI 2차 창작 영상 — 스토리보드 생성기")
     print("=" * 50)
 
-    answers = ask_guide_questions()
-    answers = confirm_summary(answers)
+    raw_answers = ask_guide_questions()
+    plot_request = confirm_summary(raw_answers)
+    answers = plot_request.model_dump()
 
     fail_count = 0
     previous_storyboard = None
@@ -275,18 +272,15 @@ def main():
             show_eval_result(result)
 
             if result.total_average >= SCORE_DIRECT_HUMAN_EVAL:
-                # 8점 이상 → 바로 Human Eval 진입
                 break
 
             if result.total_average >= SCORE_PASS_THRESHOLD:
-                # 5~7.9점 → 약점 요약 + 유저 선택
                 print("\n기준은 통과했지만 보완할 수 있는 항목이 있습니다.")
                 if result.failed_items:
                     print(f"  약점 항목: {', '.join(result.failed_items)}")
                 print("\nHuman Eval을 진행하시겠습니까? (y: 진행 / n: 추가 수정)")
                 if input("> ").strip().lower() != "n":
                     break
-                # n → 추가 수정 진행 (아래 fail 로직으로)
 
             fail_count += 1
             previous_storyboard = storyboard
@@ -320,7 +314,6 @@ def main():
         feedback = run_human_eval(storyboard, cut_count)
 
         if feedback is None:
-            # 만족 → JSON 변환 + 저장
             print("\nJSON으로 변환 중...")
             try:
                 scenes = parse_storyboard(storyboard)
@@ -335,10 +328,8 @@ def main():
             print("\n완료! 이미지 생성 단계로 넘어갈 수 있습니다. (Phase 5)")
             break
 
-        # 불만족 → 피드백 기반 가이드라인 + 재생성
-        feedback_dicts = [f.model_dump() for f in feedback]
         print("\n개선 가이드라인 생성 중...")
-        advice = generate_advice(storyboard, result, feedback=feedback_dicts, previous_advice=previous_advice)
+        advice = generate_advice(storyboard, result, feedback=feedback, previous_advice=previous_advice)
         previous_advice = advice
         print("\n[개선 방향]\n")
         print(advice)
@@ -365,7 +356,6 @@ def main():
 
         if not result.passed:
             print("\n수정 후 점수가 기준에 미달합니다. 추가 수정이 필요합니다.")
-            # Human Eval 루프 최상단으로 돌아가서 재평가 유도
 
 
 if __name__ == "__main__":
