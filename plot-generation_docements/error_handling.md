@@ -34,8 +34,9 @@
 | Error point | What can go wrong | Likelihood |
 |---|---|---|
 | plot_advisor.py — API 호출 | claude_client.py와 동일한 API 에러들 | 낮음 |
-| plot_advisor.py — 응답 | 가이드라인이 너무 길거나 형식이 예상과 다름 | 낮음 |
+| plot_advisor.py — 응답 | 빈 응답 또는 50자 미만 가이드 반환 | 낮음 |
 | cli.py — 재입력 루프 | 유저가 무한 루프에 갇힘 (계속 5점 미만) | 중간 |
+| run_model_grader — API 호출 | thinking + forced tool_choice 동시 사용 시 400 에러 | 없음 (수정됨) |
 
 ### Phase 4 — Human Eval + Converter
 
@@ -81,11 +82,21 @@
 
 | Error | Handling | 구현 위치 |
 |---|---|---|
-| Advisor API 에러 | 재시도 1회. 실패 시 Claude 가이드 대신 Low-Score Guidance 테이블 기반 정적 가이드 출력 (prompt_eval_criteria.md에 이미 정의된 "유저에게 안내할 내용"을 그대로 사용) | plot_advisor.py |
-| 가이드라인 형식 이상 | 응답이 비어있거나 너무 짧으면 (50자 미만) 정적 가이드로 fallback | plot_advisor.py |
-| 무한 루프 (계속 5점 미만) | 재생성 횟수 카운터 유지. 3단계로 대응 (아래 "무한 루프 방지 전략" 참조) | cli.py + plot_advisor.py |
+| Advisor API 에러 | SDK 재시도 소진 후에도 실패 → static fallback 문자열 반환 (루프 중단 방지). "캐릭터 외형을 첫 컷에서 구체적으로 묘사하고..." | plot_advisor.py |
+| 가이드라인 빈 응답 | response 없거나 strip() 후 빈 문자열 → static fallback | plot_advisor.py |
+| 무한 루프 (계속 5점 미만) | fail_count 카운터 유지. 3회→템플릿 제안, 5회→계속 여부 확인, 7회→강제 종료 | cli.py |
+| Model Grader thinking + tool_choice 충돌 | use_thinking=True 제거로 해결됨. forced tool_choice와 extended thinking은 Anthropic API에서 동시 사용 불가 (400 error) | plot_evaluator.py (수정 완료) |
 
 #### 무한 루프 방지 전략 (3단계)
+
+**7회 연속 미달 → Step 3: 강제 종료**
+
+```
+생성에 반복적으로 실패했습니다. 다른 아이디어로 새로 시작해주세요.
+```
+`sys.exit(1)` 호출.
+
+---
 
 **3회 연속 미달 → Step 1: 템플릿 제공**
 
@@ -131,9 +142,7 @@ Code Eval을 통과한 상태라면(구조는 맞는데 품질 점수만 낮은 
 - 2 선택 → 템플릿 다시 제시 → 루프 카운터 리셋
 - 3 선택 → 처음부터 재시작 (장르 선택부터) → 루프 카운터 리셋
 
-**Code Eval 미통과 상태에서 5회 미달인 경우:**
-구조 자체가 안 되는 거라 부분 진행 불가. 템플릿 제공 + 난이도 낮추기 제안만 반복.
-"장면 수를 줄이거나, 캐릭터를 1명만 넣어보세요."
+
 
 ### Phase 4 — Human Eval + Converter
 
@@ -183,6 +192,8 @@ Anthropic Python SDK의 내장 재시도 메커니즘을 사용한다. 커스텀
 | Advisor API 실패 | Low-Score Guidance 테이블 기반 정적 가이드 출력 |
 | Converter 파싱 부분 실패 | 실패한 필드에 기본값 적용 + 경고 표시 |
 | 파일 저장 실패 | JSON 내용을 터미널에 출력 (유저가 복사 가능) |
+| Focused Eval 실패 | full_eval로 폴백 (전체 재평가). full_eval도 실패 시 Code 점수만으로 판단 |
+| Focused Eval 자체 에러 | full_eval로 폴백 + "부분 평가 실패, 전체 평가로 전환" 안내 |
 | 무한 루프 (3회 미달) | 장르별 템플릿 예시 제공 → 유저가 수정해서 재시도 |
 | 무한 루프 (5회 미달) | Code 통과 시: 리스크 경고 + 부분 진행 허용. Code 미통과 시: 템플릿 + 난이도 낮추기 제안 |
 

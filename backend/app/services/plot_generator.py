@@ -43,14 +43,14 @@ def generate_plot(
     for attempt in range(2):
         response = call_claude(system_prompt, user_message, cache_system=cache)
 
-        if not response or not response.strip():
+        if not response or not response.strip(): # 응답이 비었으면 raise
             if attempt == 0:
                 continue
             raise GenerationError(
                 "스토리보드 생성에 실패했습니다. 다른 아이디어로 시도해보세요."
             )
 
-        if not re.search(r"\[Cut \d+\]", response):
+        if not re.search(r"\[Cut \d+\]", response): # 형식을 지키지 않았으면 raise
             if attempt == 0:
                 continue
             raise GenerationError(

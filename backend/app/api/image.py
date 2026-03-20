@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db import models
 from app.db.database import get_db
 from app.schemas.image import ImageRequest, ImageModifyRequest
-from app.service.image import backend_compose_prompt, generate_image_from_hf, upload_to_cloudinary
+from backend.app.services.image import backend_compose_prompt, generate_image_from_hf, upload_to_cloudinary
 
 # 라우터 객체 생성
 router = APIRouter()
