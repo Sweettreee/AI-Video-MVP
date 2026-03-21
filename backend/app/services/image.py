@@ -16,7 +16,14 @@ cloudinary.config(
     secure=True
 )
 
-def generate_image_from_hf(prompt: str) -> bytes:
+DEFAULT_NEGATIVE_PROMPT = (
+    "portrait, headshot, close-up face only, plain background, "
+    "white background, passport photo, ID photo, mugshot, "
+    "blurry, low quality, text, watermark"
+)
+
+
+def generate_image_from_hf(prompt: str, negative_prompt: str | None = None) -> bytes:
     """허깅페이스 API를 호출하여 이미지를 생성하고 바이트로 반환"""
     if not settings.HUGGINGFACE_API_KEY:
         raise Exception("Hugging Face API 키가 설정되지 않았습니다. .env 파일을 확인하세요!")
@@ -25,8 +32,14 @@ def generate_image_from_hf(prompt: str) -> bytes:
     headers = {"Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}"}
     max_retries = 5
 
+    neg = negative_prompt or DEFAULT_NEGATIVE_PROMPT
+    payload = {
+        "inputs": prompt,
+        "parameters": {"negative_prompt": neg},
+    }
+
     for attempt in range(max_retries):
-        response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=60)
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
 
         if response.status_code == 200:
             logger.info("이미지 생성 성공")

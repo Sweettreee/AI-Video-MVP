@@ -1,4 +1,5 @@
 from backend.app.schemas.scene import GlobalContext, Scene
+from backend.app.core.config import settings
 from backend.app.services.claude_client import call_claude
 
 # ── 장르 → 화풍 매핑 ──────────────────────────────────────
@@ -107,6 +108,39 @@ def generate_character_sheet(
     )
 
 
+# ── 캐릭터 시트 압축 (프롬프트용) ─────────────────────────
+
+_CONDENSE_SYSTEM = """\
+Extract the 3-5 most visually distinctive features from this character description.
+Output: single comma-separated English phrase, max 30 words.
+Focus on: hair (color+style), outfit (main color+type), one unique accessory or feature.
+Example: "waist-length black hair with golden hairpin, pink silk hanbok dress, silver bracelet"
+Do NOT include generic traits like "young woman" or "medium build"."""
+
+
+def condense_character_sheet(full_sheet: str) -> str:
+    """전체 캐릭터 시트(100-200 words) → 핵심 시각 특징(20-30 words).
+
+    Haiku 1회 호출. 프로젝트당 1회만 실행.
+    실패 시 첫 문장으로 폴백.
+    """
+    try:
+        result = call_claude(
+            system_prompt=_CONDENSE_SYSTEM,
+            user_message=full_sheet,
+            model=settings.SAFETY_MODEL,  # Haiku — 저비용
+        )
+        # 30단어 이내로 강제
+        words = result.strip().split()
+        if len(words) > 35:
+            result = " ".join(words[:30])
+        return result.strip()
+    except Exception:
+        # 폴백: 첫 문장만 사용
+        first_sentence = full_sheet.split(".")[0]
+        return first_sentence[:200]
+
+
 # ── GlobalContext 추출 ─────────────────────────────────────
 
 def extract_global_context(
@@ -119,11 +153,13 @@ def extract_global_context(
     화풍/색감은 규칙 기반 추론 (API 호출 없음).
     """
     character_sheet = generate_character_sheet(answers, scenes)
+    condensed = condense_character_sheet(character_sheet)
 
     era = scenes[0].era if scenes else "modern"
 
     return GlobalContext(
         main_character=character_sheet,
+        condensed_character=condensed,
         sub_character=None,  # 서브 캐릭터는 시트 내부에 포함
         art_style=_infer_art_style(answers.get("genre", "")),
         era=era,
@@ -136,8 +172,9 @@ def extract_global_context(
 def compose_cut_prompt(global_ctx: GlobalContext, scene: Scene) -> str:
     """GlobalContext(고정) + Scene(컷별 가변) → 이미지 생성 프롬프트.
 
-    캐릭터 묘사는 global_ctx에서 가져오므로 모든 컷에서 100% 동일.
-    scene.main_character는 무시하고, 캐릭터 시트를 강제 삽입한다.
+    장면 중심 프롬프트: 구도/행동/배경을 우선 배치하고,
+    캐릭터는 압축된 핵심 특징(condensed_character)만 삽입.
+    scene.main_character는 무시하고, GlobalContext의 캐릭터 정보를 사용한다.
     """
     # 카메라앵글: 빈 값이면 "eye level" 기본값
     angle = scene.camera_angle.strip() if scene.camera_angle else "eye level"
@@ -145,35 +182,28 @@ def compose_cut_prompt(global_ctx: GlobalContext, scene: Scene) -> str:
     expression_part = f", {scene.expression}" if scene.expression.strip() else ""
     # 전경: "없음" 또는 빈 값이면 생략
     foreground_part = (
-        f"foreground: {scene.foreground}, "
+        f"{scene.foreground} in foreground, "
         if scene.foreground.strip() and scene.foreground.strip() != "없음"
         else ""
     )
+    # 압축 캐릭터 사용 (하위 호환: 없으면 전체 시트 폴백)
+    char_desc = global_ctx.condensed_character or global_ctx.main_character
 
     parts = [
-        # 1. 프레임 선언 — 컷씬임을 FLUX에 명시
-        f"cinematic storyboard cut, {global_ctx.art_style}",
+        # 1. 프레임 선언 + 샷 타입 (FLUX 최우선 토큰)
+        f"cinematic storyboard cut, {scene.composition} {angle}",
 
-        # 2. 카메라 구도 — 앵글 + 샷 타입
-        f"{scene.composition}, {angle} camera angle",
+        # 2. 캐릭터+행동 통합 (캐릭터를 행동과 연결하여 초상화 방지)
+        f"{foreground_part}{char_desc} {scene.action}{expression_part}",
 
-        # 3. 장면 묘사 — 전경 → 캐릭터 행동 → 배경 (깊이 레이어 순서)
-        f"{foreground_part}a character {scene.action}{expression_part}",
-        f"background: {scene.background}, {global_ctx.era} setting",
+        # 3. 배경 환경 (장면감 확보)
+        f"{scene.background}, {global_ctx.era}",
 
-        # 4. 서사 맥락
-        f"narrative moment: {scene.story_beat}",
+        # 4. 화풍 + 조명 + 분위기
+        f"{global_ctx.art_style}, {scene.lighting} lighting, {scene.mood}",
 
-        # 5. 캐릭터 외형 (일관성 고정)
-        f"character appearance: {global_ctx.main_character}",
-        f"pose: {scene.pose}",
-
-        # 6. 분위기 + 조명 통합
-        f"{scene.lighting} lighting, {scene.mood} atmosphere",
-        f"color palette: {global_ctx.color_palette}",
-
-        # 7. 품질 태그
-        "cinematic composition, depth of field, high detail, sharp focus, consistent character appearance",
+        # 5. 색감 + 품질 태그
+        f"{global_ctx.color_palette}, cinematic depth of field",
     ]
 
     return ". ".join(parts)

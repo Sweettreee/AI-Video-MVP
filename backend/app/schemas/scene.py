@@ -34,6 +34,7 @@ class GlobalContext(BaseModel):
     """
 
     main_character: str  # Claude가 생성한 캐릭터 시트 (상세 외형 묘사)
+    condensed_character: str = ""  # 핵심 시각 특징 3-5개 (20-30 words) — 이미지 프롬프트용
     sub_character: str | None = None
     art_style: str  # anime cel-shading / photorealistic 등
     era: str  # modern / historical korean 등
