@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #080810;
+  --color-surface: rgba(12, 12, 22, 0.95);
+  --color-border: rgba(108, 99, 255, 0.18);
+  --color-purple: #6C63FF;
+  --color-cyan: #00E5FF;
+  --color-green: #22D4A0;
+  --color-red: #FF4D6D;
+  --color-yellow: #FFC107;
+  --color-text: #F0F0FF;
+  --color-muted: #50508A;
+  --color-dim: #3A3A6A;
+
+  --font-heading: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --shadow-glow-purple: 0 4px 24px rgba(108, 99, 255, 0.28);
+  --shadow-glow-green: 0 4px 20px rgba(34, 212, 160, 0.25);
+  --shadow-glow-cyan: 0 4px 20px rgba(0, 229, 255, 0.2);
+
+  --animate-spin: spin 1s linear infinite;
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in: fadeIn 0.4s ease forwards;
+  --animate-slide-up: slideUp 0.4s ease forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #080810;
+  color: #F0F0FF;
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(108, 99, 255, 0.3); border-radius: 3px; }
+
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}

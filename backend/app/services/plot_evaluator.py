@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
@@ -51,7 +51,7 @@ EMPTY_PATTERN = re.compile(r"^(없음|N/?A|해당\s*없음|-|—|\s*)$", re.IGNO
 
 def _parse_cuts(plain_text: str) -> list[dict[str, str]]:
     """plain text를 [Cut N] 단위로 분리 → 필드명:값 dict 리스트."""
-    raw_cuts = re.split(r"\[Cut \d+\]", plain_text)
+    raw_cuts = re.split(r"\[\s*Cut\s+\d+\s*\]", plain_text)
     raw_cuts = [c.strip() for c in raw_cuts if c.strip()]
 
     cuts = []
@@ -75,7 +75,7 @@ def _parse_cuts(plain_text: str) -> list[dict[str, str]]:
 
 def _score_c1(plain_text: str) -> float:
     """C1: [Cut N] 패턴이 일관되게 존재하는가."""
-    numbers = re.findall(r"\[Cut (\d+)\]", plain_text)
+    numbers = re.findall(r"\[\s*Cut\s+(\d+)\s*\]", plain_text)
     if not numbers:
         return 0.0
     actual = [int(n) for n in numbers]
@@ -187,7 +187,7 @@ def full_eval(
     code_scores = run_code_grader(plain_text)
     code_avg = sum(code_scores.values()) / len(code_scores)
 
-    # Code 평균 5.0 미만 → Model Grader 실행 안 함
+    # Code 평균 5.0 미만 → Model Grader 실행 안 함 (비용 절감)
     if code_avg < 5.0:
         failed = [k for k, v in code_scores.items() if v < 5.0]
         return EvalResult(
@@ -195,7 +195,7 @@ def full_eval(
             code_average=round(code_avg, 1),
             model_scores={},
             model_average=0.0,
-            total_average=round(code_avg / 2, 1),
+            total_average=round(code_avg, 1),
             passed=False,
             failed_items=failed,
             previous_total=previous_total,
@@ -205,17 +205,19 @@ def full_eval(
     model_result = run_model_grader(plain_text)
 
     if model_result is None:
-        # API 실패 → Code 점수만으로 판단
+        # API 실패 → 불완전 평가이므로 통과 불가, 재시도 유도
         failed = [k for k, v in code_scores.items() if v < 5.0]
+        failed.append("MODEL_GRADER_UNAVAILABLE")
         return EvalResult(
             code_scores=code_scores,
             code_average=round(code_avg, 1),
             model_scores={},
             model_average=0.0,
             total_average=round(code_avg, 1),
-            passed=code_avg >= 5.0,
+            passed=False,
             failed_items=failed,
             previous_total=previous_total,
+            model_reasoning="Model Grader API 호출 실패. 재시도 필요.",
         )
 
     model_scores = {
@@ -253,12 +255,13 @@ def focused_eval(
     previous_total: float | None = None,
 ) -> EvalResult:
     """이미지 수정 후 부분 평가. 변경 컷 + 인접 ±1, C2/C5 + M1~M4."""
-    # 대상 컷 계산
+    # 대상 컷 계산 (인접 ±1 포함, 실제 컷 범위로 제한)
+    cuts = _parse_cuts(plain_text)
+    max_cut = len(cuts)
     target_set = set()
     for c in changed_cuts:
         target_set.update([c - 1, c, c + 1])
-    target_set.discard(0)
-    target_cuts = sorted(target_set)
+    target_cuts = sorted(c for c in target_set if 1 <= c <= max_cut)
 
     # Code Grader: C2/C5만
     code_scores = run_code_grader(plain_text, target_cuts=target_cuts)
@@ -271,7 +274,7 @@ def focused_eval(
             code_average=round(code_avg, 1),
             model_scores={},
             model_average=0.0,
-            total_average=round(code_avg / 2, 1),
+            total_average=round(code_avg, 1),
             passed=False,
             failed_items=failed,
             previous_total=previous_total,
@@ -282,15 +285,17 @@ def focused_eval(
 
     if model_result is None:
         failed = [k for k, v in code_scores.items() if v < 5.0]
+        failed.append("MODEL_GRADER_UNAVAILABLE")
         return EvalResult(
             code_scores=code_scores,
             code_average=round(code_avg, 1),
             model_scores={},
             model_average=0.0,
             total_average=round(code_avg, 1),
-            passed=code_avg >= 5.0,
+            passed=False,
             failed_items=failed,
             previous_total=previous_total,
+            model_reasoning="Model Grader API 호출 실패. 재시도 필요.",
         )
 
     # M1~M4만 집계 (M5/M6 제외)

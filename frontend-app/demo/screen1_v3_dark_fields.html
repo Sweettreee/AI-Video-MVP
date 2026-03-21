@@ -1,0 +1,255 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  .app{background:#080810;min-height:100vh;font-family:'DM Sans',sans-serif;color:#F0F0FF;position:relative;overflow:hidden;}
+  .bloom{position:absolute;top:-120px;left:50%;transform:translateX(-50%);width:700px;height:400px;background:radial-gradient(ellipse at center,rgba(108,99,255,0.15) 0%,transparent 70%);pointer-events:none;z-index:0;}
+
+  .nav{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:18px 48px;border-bottom:0.5px solid rgba(108,99,255,0.12);}
+  .logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:17px;}
+  .logo-dot{width:9px;height:9px;border-radius:50%;background:#6C63FF;animation:pdot 2.5s ease-in-out infinite;}
+  @keyframes pdot{0%,100%{box-shadow:0 0 8px rgba(108,99,255,0.8);}50%{box-shadow:0 0 20px rgba(108,99,255,1),0 0 40px rgba(108,99,255,0.4);}}
+  .nav-avatar{width:32px;height:32px;border-radius:50%;background:rgba(108,99,255,0.15);border:0.5px solid rgba(108,99,255,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:#B8B0FF;}
+
+  .step-bar{position:relative;z-index:5;display:flex;align-items:center;justify-content:center;padding:22px 0 0;}
+  .si{display:flex;flex-direction:column;align-items:center;gap:5px;opacity:0.28;}
+  .si.active{opacity:1;}
+  .sd{width:26px;height:26px;border-radius:50%;border:1px solid rgba(108,99,255,0.2);display:flex;align-items:center;justify-content:center;font-size:10px;color:#4A4A70;background:transparent;}
+  .si.active .sd{background:rgba(108,99,255,0.18);border-color:#6C63FF;color:#B8B0FF;box-shadow:0 0 10px rgba(108,99,255,0.25);}
+  .sl{font-size:9px;color:#3A3A60;white-space:nowrap;}
+  .si.active .sl{color:#9090C0;}
+  .sline{width:40px;height:0.5px;background:rgba(108,99,255,0.1);margin:0 4px 18px;}
+
+  .hero{position:relative;z-index:5;display:flex;flex-direction:column;align-items:center;padding:32px 24px 24px;text-align:center;}
+  .hero-label{font-size:10px;letter-spacing:2.8px;text-transform:uppercase;color:#6C63FF;font-weight:500;margin-bottom:12px;}
+  .hero-title{font-family:'Syne',sans-serif;font-weight:800;font-size:40px;line-height:1.06;letter-spacing:-1.5px;margin:0 0 10px;max-width:540px;}
+  .hero-title .accent{background:linear-gradient(135deg,#6C63FF 0%,#00E5FF 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+  .hero-sub{font-size:13.5px;color:#50508A;max-width:380px;line-height:1.65;margin:0 0 26px;}
+
+  .input-zone{width:100%;max-width:710px;display:flex;gap:14px;align-items:flex-start;}
+  .input-col{flex:1;display:flex;flex-direction:column;gap:0;}
+
+  .form-card{background:rgba(12,12,22,0.95);border:1px solid rgba(108,99,255,0.18);border-radius:20px;overflow:hidden;}
+
+  .fields-grid{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid rgba(108,99,255,0.1);}
+
+  .field-cell{position:relative;padding:14px 18px 12px;border-right:1px solid rgba(108,99,255,0.1);}
+  .field-cell:nth-child(2n){border-right:none;}
+  .field-cell:nth-child(3),.field-cell:nth-child(4){border-top:1px solid rgba(108,99,255,0.1);}
+
+  .field-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#3A3A6A;font-weight:500;margin-bottom:5px;}
+
+  .field-input{width:100%;background:transparent;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:13.5px;color:#D0D0F0;padding:0;caret-color:#6C63FF;}
+  .field-input::placeholder{color:#252548;}
+  .field-cell:focus-within .field-label{color:#7070B8;}
+  .field-cell:focus-within{background:rgba(108,99,255,0.04);}
+
+  .story-cell{padding:14px 18px 44px;position:relative;}
+  .story-area{width:100%;background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:13px;color:#C8C8F0;resize:none;line-height:1.8;caret-color:#6C63FF;min-height:90px;}
+  .story-area::placeholder{color:#252548;}
+  .story-footer{position:absolute;bottom:12px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;}
+  .char-ct{font-size:10.5px;color:#252548;transition:color 0.2s;font-family:'DM Sans',sans-serif;}
+  .qtags{display:flex;gap:5px;pointer-events:all;}
+  .qtag{font-size:10px;color:#363660;background:rgba(108,99,255,0.07);border:0.5px solid rgba(108,99,255,0.14);border-radius:6px;padding:3px 8px;cursor:pointer;transition:all 0.2s;}
+  .qtag:hover{color:#9898D8;border-color:rgba(108,99,255,0.35);}
+
+  .form-focus-bar{height:2px;background:linear-gradient(90deg,#6C63FF,#00E5FF);transform:scaleX(0);transform-origin:left;transition:transform 0.3s ease;}
+  .form-card:focus-within .form-focus-bar{transform:scaleX(1);}
+
+  .cta-btn{width:100%;height:50px;border-radius:100px;border:none;background:linear-gradient(135deg,#6C63FF 0%,#00E5FF 100%);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;position:relative;overflow:hidden;transition:transform 0.15s,box-shadow 0.2s;box-shadow:0 4px 24px rgba(108,99,255,0.28);margin-top:10px;}
+  .cta-btn::after{content:'';position:absolute;top:0;left:-100%;width:55%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.14),transparent);transform:skewX(-20deg);}
+  .cta-btn:hover{transform:translateY(-1px);box-shadow:0 6px 32px rgba(108,99,255,0.44);}
+  .cta-btn:hover::after{left:150%;transition:left 0.5s ease;}
+  .cta-btn:active{transform:scale(0.98);}
+  .cta-btn.loading{background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.25);color:#8080B8;box-shadow:none;cursor:wait;}
+  .cta-btn.ready{background:linear-gradient(135deg,#22D4A0 0%,#6C63FF 100%);box-shadow:0 4px 24px rgba(34,212,160,0.28);}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(108,99,255,0.2);border-top-color:#6C63FF;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:7px;}
+
+  .coach{width:205px;flex-shrink:0;background:rgba(12,12,22,0.95);border:1px solid rgba(108,99,255,0.18);border-radius:16px;padding:14px;}
+  .coach-header{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#303060;margin-bottom:10px;padding-bottom:9px;border-bottom:0.5px solid rgba(108,99,255,0.1);}
+  .c-item{display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:9px;transition:background 0.25s;}
+  .c-item.on{background:rgba(34,212,160,0.07);}
+  .c-icon{width:16px;height:16px;flex-shrink:0;border-radius:50%;border:1.5px solid rgba(108,99,255,0.2);display:flex;align-items:center;justify-content:center;margin-top:2px;transition:all 0.3s;}
+  .c-item.on .c-icon{background:#22D4A0;border-color:#22D4A0;}
+  .c-mark{width:6px;height:6px;border-right:1.5px solid #080810;border-bottom:1.5px solid #080810;transform:rotate(45deg) translate(-1px,-1px);opacity:0;transition:opacity 0.2s;}
+  .c-item.on .c-mark{opacity:1;}
+  .c-lbl{font-size:11.5px;font-weight:500;color:#3A3A6A;transition:color 0.3s;line-height:1.3;}
+  .c-item.on .c-lbl{color:#22D4A0;}
+  .c-hint{font-size:10px;color:#252548;line-height:1.4;margin-top:1px;}
+  .c-item.on .c-hint{color:#0E5040;}
+  .coach-prog{margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(108,99,255,0.1);}
+  .prog-bg{height:2.5px;background:rgba(108,99,255,0.1);border-radius:100px;overflow:hidden;}
+  .prog-fill{height:100%;background:linear-gradient(90deg,#6C63FF,#00E5FF);border-radius:100px;transition:width 0.4s ease;width:0%;}
+  .prog-lbl{font-size:10px;color:#303060;margin-top:5px;text-align:right;}
+
+  .sug-row{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin-top:16px;max-width:710px;}
+  .sug-chip{font-size:11px;color:#383868;background:rgba(108,99,255,0.04);border:0.5px solid rgba(108,99,255,0.1);border-radius:100px;padding:5px 13px;cursor:pointer;transition:all 0.2s;}
+  .sug-chip:hover{color:#A8A0E8;border-color:rgba(108,99,255,0.32);background:rgba(108,99,255,0.1);}
+
+  .err{border-color:rgba(255,77,109,0.5) !important;}
+</style>
+
+<div class="app">
+  <div class="bloom"></div>
+  <nav class="nav">
+    <div class="logo"><div class="logo-dot"></div>FanFrame</div>
+    <div class="nav-avatar">N</div>
+  </nav>
+
+  <div class="step-bar">
+    <div class="si active"><div class="sd">1</div><span class="sl">Prompt</span></div>
+    <div class="sline"></div>
+    <div class="si"><div class="sd">2</div><span class="sl">Storyboard</span></div>
+    <div class="sline"></div>
+    <div class="si"><div class="sd">3</div><span class="sl">Evaluate</span></div>
+    <div class="sline"></div>
+    <div class="si"><div class="sd">4</div><span class="sl">Generating</span></div>
+    <div class="sline"></div>
+    <div class="si"><div class="sd">5</div><span class="sl">Result</span></div>
+  </div>
+
+  <div class="hero">
+    <p class="hero-label">AI Fan Video Studio</p>
+    <h1 class="hero-title">Turn your idea into a <span class="accent">video.</span></h1>
+    <p class="hero-sub">Fill in the details — the more vivid, the better the result.</p>
+
+    <div class="input-zone">
+      <div class="input-col">
+        <div class="form-card">
+          <div class="form-focus-bar"></div>
+          <div class="fields-grid">
+            <div class="field-cell" id="cell-genre">
+              <p class="field-label">Genre</p>
+              <input class="field-input" id="f-genre" placeholder="K-pop, Anime, Game…" oninput="sync()"/>
+            </div>
+            <div class="field-cell" id="cell-char">
+              <p class="field-label">Character</p>
+              <input class="field-input" id="f-char" placeholder="a girl group idol…" oninput="sync()"/>
+            </div>
+            <div class="field-cell" id="cell-mood">
+              <p class="field-label">Mood</p>
+              <input class="field-input" id="f-mood" placeholder="melancholic, epic…" oninput="sync()"/>
+            </div>
+            <div class="field-cell" id="cell-set">
+              <p class="field-label">Setting</p>
+              <input class="field-input" id="f-set" placeholder="rooftop, night city…" oninput="sync()"/>
+            </div>
+          </div>
+          <div class="story-cell">
+            <p class="field-label">Story</p>
+            <textarea class="story-area" id="f-story" rows="4"
+              placeholder="Describe what happens in your video…"
+              oninput="onStory(this)" maxlength="500"></textarea>
+            <div class="story-footer">
+              <div class="qtags">
+                <span class="qtag" onclick="addTag('slow motion')">+ slow motion</span>
+                <span class="qtag" onclick="addTag('cinematic')">+ cinematic</span>
+                <span class="qtag" onclick="addTag('neon')">+ neon</span>
+              </div>
+              <span class="char-ct" id="charCt">0 / 500</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="cta-btn" id="ctaBtn" onclick="handleGen()">
+          <span id="ctaTxt">Generate Storyboard</span>
+        </button>
+      </div>
+
+      <div class="coach">
+        <p class="coach-header">Prompt Coach</p>
+        <div class="c-item" id="c-genre">
+          <div class="c-icon"><div class="c-mark"></div></div>
+          <div><div class="c-lbl">Genre</div><div class="c-hint">K-pop / Anime / Game?</div></div>
+        </div>
+        <div class="c-item" id="c-char">
+          <div class="c-icon"><div class="c-mark"></div></div>
+          <div><div class="c-lbl">Character</div><div class="c-hint">Who is the focus?</div></div>
+        </div>
+        <div class="c-item" id="c-mood">
+          <div class="c-icon"><div class="c-mark"></div></div>
+          <div><div class="c-lbl">Mood</div><div class="c-hint">Emotional tone?</div></div>
+        </div>
+        <div class="c-item" id="c-setting">
+          <div class="c-icon"><div class="c-mark"></div></div>
+          <div><div class="c-lbl">Setting</div><div class="c-hint">Where / when?</div></div>
+        </div>
+        <div class="c-item" id="c-story">
+          <div class="c-icon"><div class="c-mark"></div></div>
+          <div><div class="c-lbl">Story</div><div class="c-hint">What happens?</div></div>
+        </div>
+        <div class="coach-prog">
+          <div class="prog-bg"><div class="prog-fill" id="progFill"></div></div>
+          <p class="prog-lbl" id="progLbl">0 / 5 fields</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="sug-row">
+      <span class="sug-chip" onclick="fill('K-pop','a girl group idol','melancholic','neon-lit rooftop at night','A lone idol performs under neon rain, slow motion, dramatic lighting')">✦ K-pop neon rain</span>
+      <span class="sug-chip" onclick="fill('Anime','a samurai warrior','epic','cherry blossom battlefield','A warrior stands in a storm of petals, cinematic wide shot, ethereal glow')">✦ Anime cherry blossom</span>
+      <span class="sug-chip" onclick="fill('Game','a lone hero','melancholic','ancient ruins at golden hour','Hero walks through crumbling ruins at dusk, camera slowly pulls back')">✦ Game hero in ruins</span>
+      <span class="sug-chip" onclick="fill('K-pop','a girl group','vibrant','futuristic glowing stage','Group performs a high-energy dance, dynamic camera angles, vivid colors')">✦ K-pop stage</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  function sync(){
+    check('c-genre', document.getElementById('f-genre').value.trim().length > 0);
+    check('c-char',  document.getElementById('f-char').value.trim().length > 0);
+    check('c-mood',  document.getElementById('f-mood').value.trim().length > 0);
+    check('c-setting',document.getElementById('f-set').value.trim().length > 0);
+    check('c-story', document.getElementById('f-story').value.trim().length > 0);
+    const done = ['c-genre','c-char','c-mood','c-setting','c-story'].filter(id=>document.getElementById(id).classList.contains('on')).length;
+    document.getElementById('progFill').style.width = (done/5*100)+'%';
+    document.getElementById('progLbl').textContent = done+' / 5 fields';
+  }
+  function check(id, on){ document.getElementById(id).classList.toggle('on', on); }
+  function onStory(el){
+    const n = el.value.length;
+    const ct = document.getElementById('charCt');
+    ct.textContent = n+' / 500';
+    ct.style.color = n>450?'#FF4D6D':n>300?'#6C63FF':'#252548';
+    sync();
+  }
+  function addTag(t){
+    const el = document.getElementById('f-story');
+    el.value = el.value.trim() ? el.value.trim()+', '+t : t;
+    onStory(el); el.focus();
+  }
+  function fill(g,c,m,s,st){
+    document.getElementById('f-genre').value=g;
+    document.getElementById('f-char').value=c;
+    document.getElementById('f-mood').value=m;
+    document.getElementById('f-set').value=s;
+    document.getElementById('f-story').value=st;
+    onStory(document.getElementById('f-story'));
+  }
+  let busy=false;
+  function handleGen(){
+    const g=document.getElementById('f-genre').value.trim();
+    const s=document.getElementById('f-story').value.trim();
+    if(!g||!s){
+      if(!g) document.getElementById('cell-genre').classList.add('err');
+      if(!s) document.querySelector('.form-card').style.borderColor='rgba(255,77,109,0.4)';
+      setTimeout(()=>{
+        document.getElementById('cell-genre').classList.remove('err');
+        document.querySelector('.form-card').style.borderColor='';
+      },1600);
+      return;
+    }
+    if(busy) return;
+    busy=true;
+    const btn=document.getElementById('ctaBtn');
+    const txt=document.getElementById('ctaTxt');
+    btn.className='cta-btn loading';
+    txt.innerHTML='<span class="spinner"></span>Generating Storyboard...';
+    setTimeout(()=>{
+      busy=false;
+      btn.className='cta-btn ready';
+      txt.textContent='✓ Storyboard Ready — View';
+    },2500);
+  }
+</script>

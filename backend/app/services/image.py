@@ -1,10 +1,13 @@
+import logging
 import time
+
 import requests
 import cloudinary
 import cloudinary.uploader
 
 from backend.app.core.config import settings
-from backend.app.schemas.image import ImageRequest
+
+logger = logging.getLogger(__name__)
 
 cloudinary.config(
     cloud_name=settings.CLOUDINARY_CLOUD_NAME,
@@ -12,10 +15,6 @@ cloudinary.config(
     api_secret=settings.CLOUDINARY_API_SECRET,
     secure=True
 )
-
-def backend_compose_prompt(req: ImageRequest) -> str:
-    prompt = f"{req.art_style}, {req.main_character} is {req.action}, doing {req.pose}. "              f"The background is {req.background} set in {req.era}. "              f"Shot in {req.composition} with {req.lighting} lighting. {req.mood} mood. "              f"High quality, detailed, sharp focus."
-    return prompt
 
 def generate_image_from_hf(prompt: str) -> bytes:
     """허깅페이스 API를 호출하여 이미지를 생성하고 바이트로 반환"""
@@ -30,18 +29,20 @@ def generate_image_from_hf(prompt: str) -> bytes:
         response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=60)
 
         if response.status_code == 200:
-            print("이미지 생성 성공!")
+            logger.info("이미지 생성 성공")
             return response.content
         elif response.status_code == 503:
-            print(f"서버 웜업 중... ({attempt+1}/{max_retries})")
+            logger.warning(f"HF 서버 웜업 중... ({attempt+1}/{max_retries})")
             time.sleep(5)
+        elif response.status_code == 429:
+            wait = min(2 ** attempt, 30)
+            logger.warning(f"HF 429 rate limit, {wait}초 대기... ({attempt+1}/{max_retries})")
+            time.sleep(wait)
         else:
-            print(f"API 에러({response.status_code}): {response.text}")
+            logger.error(f"HF API 에러({response.status_code}): {response.text}")
             break
 
-    print("프론트엔드 테스트를 위해 더미 이미지를 사용합니다.")
-    fallback_url = "https://placehold.co/1024x576/cccccc/000000.png?text=HuggingFace+API+Failed"
-    return requests.get(fallback_url).content
+    raise Exception("HuggingFace 이미지 생성 실패: 모든 재시도 소진")
 
 def upload_to_cloudinary(image_bytes: bytes) -> str:
     """Cloudinary에 이미지를 업로드하고 URL을 반환"""
