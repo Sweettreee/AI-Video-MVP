@@ -1,33 +1,9 @@
-# pip install -r requirements.txt를 통해 설치
-
-
-# Web Framework & Server
-fastapi
-uvicorn[standard]
-python-multipart
-
-# AI APIs
-anthropic
-google-genai
-
-# Video Processing
-moviepy
-decorator
-imageio
-imageio-ffmpeg
-
-# Cloud Storage
-cloudinary
-
-# Data Validation & Parsing
+anthropic>=0.52.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+sqlalchemy>=2.0.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
-
-# Database (SQLite ORM - 선택사항이나 권장됨)
-SQLAlchemy
-
-# Environment Variables Management
-python-dotenv
-
-#구글 인증 라이브러리 설치
-google-auth
+requests>=2.31.0
+cloudinary>=1.36.0
+python-multipart>=0.0.9

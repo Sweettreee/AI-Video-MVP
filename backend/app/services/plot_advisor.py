@@ -5,7 +5,6 @@ from backend.app.prompts.advisor import (
 )
 from backend.app.schemas.feedback import Feedback
 from backend.app.services.claude_client import call_claude
-from backend.app.services.plot_evaluator import EvalResult
 
 _STATIC_FALLBACK = (
     "캐릭터 외형(의상, 헤어, 체형)을 첫 등장 컷에서 구체적으로 묘사하고 이후 컷에서 일관되게 유지하세요. "
@@ -16,7 +15,7 @@ _STATIC_FALLBACK = (
 
 def generate_advice(
     plain_text: str,
-    eval_result: EvalResult,
+    failed_items: list[str],
     feedback: list[Feedback] | None = None,
     previous_advice: str | None = None,
 ) -> str:
@@ -33,7 +32,7 @@ def generate_advice(
         feedback_dicts = [f.model_dump() for f in feedback]
         user_message = get_human_feedback_user_message(plain_text, feedback_dicts)
     else:
-        user_message = get_advisor_user_message(plain_text, eval_result.failed_items)
+        user_message = get_advisor_user_message(plain_text, failed_items)
 
     if previous_advice:
         user_message += (
