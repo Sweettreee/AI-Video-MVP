@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.api import plot, image, video
-from backend.app.db.database import engine, _migrate
-from backend.app.db import models
+from app.api import plot, image, video
+from app.db.database import engine, _migrate
+from app.db import models
 
 # DB 테이블 자동 생성 + 누락 컬럼 마이그레이션
 models.Base.metadata.create_all(bind=engine)
