@@ -12,6 +12,17 @@ const FIELDS: Array<{ key: keyof PlotRequest; label: string; placeholder: string
   { key: 'must_have', label: 'Must-have (optional)', placeholder: 'Rain scene, rooftop...' },
 ]
 
+const spinKeyframes = `
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 4px 24px rgba(108,99,255,0.3); }
+    50% { box-shadow: 0 4px 40px rgba(108,99,255,0.6), 0 0 60px rgba(0,229,255,0.2); }
+  }
+`
+
 export function PromptPage() {
   const navigate = useNavigate()
   const { setProjectId, setFormData, setPlainText, setStep } = useProjectStore()
@@ -53,6 +64,8 @@ export function PromptPage() {
 
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 16px 80px' }}>
+      <style>{spinKeyframes}</style>
+
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: 36, fontWeight: 800, margin: 0, background: 'linear-gradient(135deg,#6C63FF,#00E5FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           Create Your Fan Story
@@ -75,7 +88,34 @@ export function PromptPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 20 }}>
         {/* Form card */}
         <form onSubmit={handleSubmit}>
-          <div style={{ background: 'rgba(12,12,22,0.95)', border: '1px solid rgba(108,99,255,0.18)', borderRadius: 20, padding: 28 }}>
+          <div style={{ position: 'relative', background: 'rgba(12,12,22,0.95)', border: '1px solid rgba(108,99,255,0.18)', borderRadius: 20, padding: 28 }}>
+
+            {/* Loading overlay */}
+            {loading && (
+              <div style={{
+                position: 'absolute', inset: 0, borderRadius: 20,
+                background: 'rgba(8,8,18,0.75)',
+                backdropFilter: 'blur(4px)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 16, zIndex: 10,
+              }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: '50%',
+                  border: '3px solid rgba(108,99,255,0.2)',
+                  borderTopColor: '#6C63FF',
+                  animation: 'spin 0.9s linear infinite',
+                }} />
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ color: '#A8A4FF', fontSize: 15, fontWeight: 600, fontFamily: 'Syne, sans-serif' }}>
+                    Generating Storyboard…
+                  </div>
+                  <div style={{ color: '#50508A', fontSize: 12, marginTop: 4, fontFamily: 'DM Sans, sans-serif' }}>
+                    AI is crafting your story scenes
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               {FIELDS.map(f => (
                 <div key={f.key}>
@@ -121,10 +161,25 @@ export function PromptPage() {
                 background: canSubmit ? 'linear-gradient(135deg,#6C63FF,#5A54E8)' : 'rgba(108,99,255,0.2)',
                 color: canSubmit ? '#fff' : '#50508A', fontSize: 15, fontWeight: 600,
                 cursor: canSubmit ? 'pointer' : 'not-allowed', fontFamily: 'Syne, sans-serif',
-                boxShadow: canSubmit ? '0 4px 24px rgba(108,99,255,0.3)' : undefined,
+                animation: loading ? 'pulse-glow 1.5s ease-in-out infinite' : undefined,
+                boxShadow: canSubmit && !loading ? '0 4px 24px rgba(108,99,255,0.3)' : undefined,
                 transition: 'all 0.2s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}>
-              {loading ? '⟳ Generating Storyboard...' : '✦ Generate Storyboard'}
+              {loading ? (
+                <>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.3)',
+                    borderTopColor: '#fff',
+                    animation: 'spin 0.9s linear infinite',
+                    flexShrink: 0,
+                  }} />
+                  Generating Storyboard…
+                </>
+              ) : (
+                '✦ Generate Storyboard'
+              )}
             </button>
           </div>
         </form>
